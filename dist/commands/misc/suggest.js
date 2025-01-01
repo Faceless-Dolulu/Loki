@@ -2,7 +2,7 @@ import { ActionRowBuilder, ModalBuilder, SlashCommandBuilder, TextInputBuilder, 
 import suggestionChannelSchema from "../../models/SuggestionsChannel.js";
 export const data = new SlashCommandBuilder()
     .setName("suggest")
-    .setDescription("Make a suggestion for your server");
+    .setDescription("Make a suggestion");
 export async function run({ interaction, client, handler }) {
     const suggestionsConfigured = suggestionChannelSchema.exists({
         guildId: interaction.guildId,
