@@ -1,0 +1,48 @@
+{
+	"name": "unique-random",
+	"version": "4.0.0",
+	"description": "Generate random numbers that are consecutively unique",
+	"license": "MIT",
+	"repository": "sindresorhus/unique-random",
+	"funding": "https://github.com/sponsors/sindresorhus",
+	"author": {
+		"name": "Sindre Sorhus",
+		"email": "sindresorhus@gmail.com",
+		"url": "https:/sindresorhus.com"
+	},
+	"type": "module",
+	"exports": {
+		"types": "./index.d.ts",
+		"default": "./index.js"
+	},
+	"sideEffects": false,
+	"engines": {
+		"node": ">=18"
+	},
+	"scripts": {
+		"test": "xo && ava && tsd"
+	},
+	"files": [
+		"index.js",
+		"index.d.ts"
+	],
+	"keywords": [
+		"unique",
+		"random",
+		"number",
+		"single",
+		"generate",
+		"non-repeating",
+		"consecutively",
+		"iterable",
+		"iterator",
+		"generator"
+	],
+	"devDependencies": {
+		"ava": "^6.1.2",
+		"chalk": "^5.3.0",
+		"in-range": "^3.0.0",
+		"tsd": "^0.31.0",
+		"xo": "^0.58.0"
+	}
+}

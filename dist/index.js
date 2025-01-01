@@ -28,6 +28,7 @@ new CommandKit({
     validationsPath: path.join(__dirname, "validations"),
     skipBuiltInValidations: false,
     devUserIds: ["306958469439684608"],
+    devGuildIds: ["1306696123766931486"],
     bulkRegister: true,
 });
 mongoose.connect(String(process.env.DB_URL)).then(() => {
