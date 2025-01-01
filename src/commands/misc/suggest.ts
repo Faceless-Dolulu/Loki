@@ -11,7 +11,7 @@ import suggestionChannelSchema from "../../models/SuggestionsChannel.js";
 
 export const data = new SlashCommandBuilder()
 	.setName("suggest")
-	.setDescription("Make a suggestion for your server");
+	.setDescription("Make a suggestion");
 
 export async function run({ interaction, client, handler }: SlashCommandProps) {
 	const suggestionsConfigured = suggestionChannelSchema.exists({
