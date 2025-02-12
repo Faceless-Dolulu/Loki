@@ -1,126 +1,131 @@
-import { EmbedBuilder } from "@discordjs/builders";
 import { CommandOptions, SlashCommandProps } from "commandkit";
-import {  BaseGuildTextChannel, GuildMember, GuildMemberRoleManager, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
-import kickLogsChannelSchema from '../../models/KickLogs.js';
+import {
+	BaseGuildTextChannel,
+	EmbedBuilder,
+	GuildMember,
+	GuildMemberRoleManager,
+	InteractionContextType,
+	PermissionFlagsBits,
+	SlashCommandBuilder,
+} from "discord.js";
+import serverConfigSchema from "../../models/ServerConfig.js";
 import { fileURLToPath } from "url";
 
 export const data = new SlashCommandBuilder()
-.setName('kick')
-.setDescription('Kick a user from this server')
-.setDefaultMemberPermissions(PermissionFlagsBits.KickMembers)
-.addUserOption(option =>
-option
-.setName('user')
-.setDescription('The user you want to kick')
-.setRequired(true))
-.addStringOption(option =>
-    option
-    .setName('reason')
-    .setDescription('The reason for banning this user from your server')
-.setRequired(true))
-.setDMPermission(false);
+	.setName("kick")
+	.setDescription("Kicks a user from this server")
+	.setDefaultMemberPermissions(PermissionFlagsBits.KickMembers)
+	.addUserOption((option) =>
+		option
+			.setName("user")
+			.setDescription("The user you want to kick")
+			.setRequired(true)
+	)
+	.addStringOption((option) =>
+		option
+			.setName("reason")
+			.setDescription("The reason for kicking this user from the server")
+			.setMaxLength(512)
+	)
+	.setContexts(InteractionContextType.Guild);
 
-export async function run ({ interaction, client, handler}: SlashCommandProps) {
-    try {
-        const targetUser = interaction.options.getMember('user') as GuildMember;
-        const reason = interaction.options.getString('reason') || "no reason provided";
+export async function run({ interaction, client, handler }: SlashCommandProps) {
+	try {
+		const targetMember = interaction.options.getMember("user") as GuildMember;
+		const reason =
+			interaction.options.getString("reason") ?? "No reason was provided";
 
-        await interaction.deferReply({ephemeral:true});
+		await interaction.deferReply();
 
-        const executorRoles = interaction.member?.roles as GuildMemberRoleManager;
+		const executor = interaction.member as GuildMember;
+		const executorRoles = executor?.roles as GuildMemberRoleManager;
+		const targetRoles = targetMember?.roles as GuildMemberRoleManager;
 
-        if (!targetUser) {
-            await interaction.followUp('❌ user is not in this server! ');
-            return;
-        }
-    
-        if (targetUser.id === interaction.user.id) {
-            await interaction.followUp("❌ You can't kick yourself!");
-            return;
-        }
-    
-        
-        const targetUserRolePosition = targetUser?.roles.highest.position; //Highest role position of the target
-        const requestUserRolePosition = executorRoles.highest.position; //Highest role position of the user inputting the ban command.
-      
-    
-    
-        if (targetUserRolePosition >= requestUserRolePosition) {
-        await interaction.followUp("❌ You can't kick a user with equal or higher roles!")
-        return; 
-        }   
-    
-        if (!targetUser.kickable) {
-        interaction.followUp('❌ This user cannot be kicked!')
-        return;
-        }
-    
-        if (reason.length > 512) {
-        interaction.followUp('❌ The reason cannot be longer than 512 characters.');
-        return;
-        }
+		if (!targetMember) {
+			await interaction.followUp(`❌ User is not in this server!`);
+		}
 
-        const kickLogMessage = new EmbedBuilder()
-        .setColor(0xe27104)
-        .setAuthor({name: `${interaction.user.username} (ID ${interaction.user.id})`, iconURL:interaction.user.displayAvatarURL() })
-        .setThumbnail(targetUser.user.displayAvatarURL())
-        .addFields(
-            {name: '\u200b', value: `:boot: **Kicked:** ${targetUser} (ID ${targetUser.user.id})`},
-            {name: '\u200b', value: `:page_facing_up: **Reason:** ${reason}`}
-        )
-        .setTimestamp();
+		if (targetMember.id === executor.id) {
+			await interaction.followUp(`❌ you cannot kick yourself!`);
+			return;
+		}
 
-        const kickConfigs = await kickLogsChannelSchema.find({
-            guildId: targetUser.guild.id,
-        });
+		if (targetRoles.highest.position >= executorRoles.highest.position) {
+			await interaction.followUp(
+				`❌ You can't kick a user with equal or higher roles!`
+			);
+			return;
+		}
 
-        for (const kickConfig of kickConfigs) {
-            const kickLogChannel = targetUser.guild.channels.cache.get(kickConfig.channelId) as BaseGuildTextChannel
-            ||
-             (await targetUser.guild.channels.fetch(kickConfig.channelId)) as BaseGuildTextChannel;
-            
-             if (!kickLogChannel) {
-                kickLogsChannelSchema.findOneAndDelete({
-                    guildId: targetUser.guild.id,
-                    ChannelId: kickConfig.channelId,
-                }).catch(()=> {});
-                
-                targetUser?.send({embeds:[ new EmbedBuilder()
-                    .setColor(0xFF0000)
-                    .setDescription(`
-                        🥾 you were **kicked** from ${interaction.guild?.name} \n
-                        📄 **Reason:** ${reason}`)
-                        .setThumbnail(interaction.guild?.iconURL({})!)
-                    ]}).catch();
-                    
-                    interaction.followUp(`🥾 ${targetUser} has been kicked!`);
-        
-                    targetUser.kick();
+		if (!targetMember.kickable) {
+			interaction.followUp(`❌ This user cannot be kicked!`);
+			return;
+		}
 
-                   return;
-             }
-             kickLogChannel.send({embeds: [kickLogMessage]});
+		const serverConfig = await serverConfigSchema.findOne({
+			guildId: interaction.guildId,
+		});
 
-             
-          targetUser?.send({embeds:[ new EmbedBuilder()
-            .setColor(0xFF0000)
-            .setDescription(`
-                🥾 you were **kicked** from ${interaction.guild?.name} \n
-                📄 **Reason:** ${reason}`)
-                .setThumbnail(interaction.guild?.iconURL({})!)
-            ]}).catch();
-            
-            interaction.followUp(`🥾 ${targetUser} has been kicked!`);
+		const kickLogChannel =
+			(interaction.guild?.channels.cache.get(
+				serverConfig?.kickLogsChannelId as string
+			) as BaseGuildTextChannel) ??
+			((await interaction.guild?.channels.fetch(
+				serverConfig?.kickLogsChannelId as string
+			)) as BaseGuildTextChannel);
 
-            targetUser.kick();
-        }
-    } catch (error) {
-        console.log(`Error in ${fileURLToPath(import.meta.url)}:\n`, error);
-    }
- 
+		const kickLogMessage = new EmbedBuilder()
+			.setColor(0xffff00)
+			.setAuthor({
+				name: `${executor.user.username} (ID ${executor.id})`,
+				iconURL: executor.displayAvatarURL(),
+			})
+			.setThumbnail(targetMember.displayAvatarURL())
+			.addFields(
+				{
+					name: "\u200b",
+					value: `👢 **Kicked:**${targetMember} (ID ${targetMember.id})`,
+				},
+				{
+					name: "\u200b",
+					value: `:page_facing_up: **Reason:** ${reason}`,
+				}
+			)
+			.setTimestamp();
+		targetMember
+			.send({
+				embeds: [
+					new EmbedBuilder()
+						.setColor(0xffff00)
+						.setDescription(
+							`⚠ You were **Kicked** from ${interaction.guild?.name}\n📄 **Reason:** ${reason} `
+						)
+						.setTimestamp()
+						.setThumbnail(interaction.guild?.iconURL() as string),
+				],
+			})
+			.catch();
+
+		await targetMember.kick(reason).then(async () => {
+			if (kickLogChannel !== null) {
+				kickLogChannel.send({ embeds: [kickLogMessage] });
+			}
+
+			await interaction.followUp(
+				`👢 ${targetMember} has been kicked from the server!`
+			);
+		});
+	} catch (error) {
+		interaction.followUp(
+			`An error occured running this command. Please try again in a moment.`
+		);
+		console.log(
+			`An error occured in ${fileURLToPath(import.meta.url)}:\n`,
+			error
+		);
+	}
 }
 
 export const options: CommandOptions = {
-    userPermissions: [`KickMembers`],
-    botPermissions: ['KickMembers']
- }
+	botPermissions: [`KickMembers`],
+};

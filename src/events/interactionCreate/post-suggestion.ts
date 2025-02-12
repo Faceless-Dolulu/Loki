@@ -6,7 +6,7 @@ import {
 	EmbedBuilder,
 	ModalSubmitInteraction,
 } from "discord.js";
-import suggestionChannelSchema from "../../models/SuggestionsChannel.js";
+import serverConfigSchema from "../../models/ServerConfig.js";
 
 export default async (
 	interaction: ModalSubmitInteraction,
@@ -18,16 +18,16 @@ export default async (
 		if (interaction.customId === "Suggestion") {
 			const suggestion =
 				interaction.fields.getTextInputValue("suggestionInput");
-			const suggestionConfig = await suggestionChannelSchema.findOne({
+			const serverConfig = await serverConfigSchema.findOne({
 				guildId: interaction.guildId,
 			});
-			if (!suggestionConfig) return;
+
 			const suggestionChannel =
 				(interaction.guild?.channels.cache.get(
-					suggestionConfig?.channelId
+					serverConfig?.suggestionChannelId as string
 				) as BaseGuildTextChannel) ||
 				((await interaction.guild?.channels.fetch(
-					suggestionConfig?.channelId
+					serverConfig?.suggestionChannelId as string
 				)) as BaseGuildTextChannel);
 
 			const embed = new EmbedBuilder()
@@ -45,8 +45,9 @@ export default async (
 			await suggestionChannel.lastMessage?.react("❌");
 			interaction.reply({
 				content: `Your submission has been received!`,
-				ephemeral: true,
+				flags: "Ephemeral",
 			});
+			return true;
 		}
 	} catch (error) {
 		console.log(error);

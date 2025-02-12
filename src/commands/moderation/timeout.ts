@@ -1,123 +1,194 @@
 import { CommandOptions, SlashCommandProps } from "commandkit";
-import { BaseGuildTextChannel, EmbedBuilder, GuildMember, GuildMemberRoleManager, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
+import {
+	BaseGuildTextChannel,
+	EmbedBuilder,
+	GuildMember,
+	GuildMemberRoleManager,
+	InteractionContextType,
+	PermissionFlagsBits,
+	SlashCommandBuilder,
+} from "discord.js";
 import ms from "ms";
-import timeoutLogsChannelSchema from '../../models/TimeOutLogs.js';
 import prettyMilliseconds from "pretty-ms";
+import ServerConfig from "../../models/ServerConfig.js";
+import { fileURLToPath } from "url";
 
 export const data = new SlashCommandBuilder()
-.setName('timeout')
-.setDescription('Timeouts a user')
-.setDefaultMemberPermissions(PermissionFlagsBits.MuteMembers)
-.addUserOption(option =>
-    option.setName('user')
-        .setDescription('The user you want to timeout')
-        .setRequired(true))
-.addStringOption(option =>
-    option.setName('reason')
-        .setDescription('The reason for issuing a timeout against this user')
-        .setRequired(true))
-.addStringOption(option =>
-    option.setName('duration')
-        .setDescription('Timeout duration (30m, 1h, 1day')
-        .setRequired(true));
+	.setName("timeout")
+	.setDescription(`Timeouts a user`)
+	.setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+	.addUserOption((option) =>
+		option
+			.setName("user")
+			.setDescription("The user you want to timeout")
+			.setRequired(true)
+	)
+	.addStringOption((option) =>
+		option
+			.setName("reason")
+			.setDescription("The reason for issuing a timeout to the target user")
+			.setMaxLength(512)
+	)
+	.addStringOption((option) =>
+		option.setName("duration").setDescription("Timeout duration (30m, 1h, 1d)")
+	)
+	.setContexts(InteractionContextType.Guild);
 
-        export async function run ({ interaction, client, handler}: SlashCommandProps) {
-            try{
-            const targetUser = interaction.options.getMember('user') as GuildMember;
-            const reason = interaction.options.getString('reason') || "No reason provided";
-            const duration = await interaction.options.getString('duration');
+export async function run({ interaction, client, handler }: SlashCommandProps) {
+	try {
+		const targetMember = interaction.options.getMember("user") as GuildMember;
+		const reason =
+			interaction.options.getString("reason") ?? "No reason was provided";
+		const durationInput = interaction.options.getString("duration") ?? `30m`;
+		const timeoutDuration = ms(durationInput as string);
+		const executor = interaction.member as GuildMember;
+		const executorRoles = executor?.roles as GuildMemberRoleManager;
+		const targetRoles = targetMember?.roles as GuildMemberRoleManager;
 
-            await interaction.deferReply({ephemeral:true});
-            //@ts-ignore
-            const msDuration = ms(duration);
-            if (isNaN(msDuration)) {
-                await interaction.followUp('Please provide a valid timout duration');
-                return;
-            }
+		interaction.deferReply();
 
-            if (msDuration < 5000 || msDuration > 2.519e9) {
-                await interaction.followUp( `Timeout duration cannot be less than 5 seconds or more than 28 days`);
-                return;
-            }
+		if (
+			!interaction.guild?.members.me?.permissions.has(
+				PermissionFlagsBits.ModerateMembers
+			)
+		) {
+			interaction.followUp(
+				`❌ I do not have the necessary permissions to execute this command!`
+			);
+			return;
+		}
 
-            const executorRoles = interaction.member?.roles as GuildMemberRoleManager;
+		if (isNaN(timeoutDuration)) {
+			await interaction.followUp(`❌ Please provide a valid duration!`);
+			return;
+		}
 
-            if (!targetUser) {
-                await interaction.followUp('❌ User is not in this server!');
-                return;
-            }
-            if (targetUser.id === interaction.user.id) {
-                await interaction.followUp("❌ You can't timeout yourself!");
-                return;
-             }   
+		if (targetMember.id === executor.id) {
+			await interaction.followUp(`❌ You can't time yourself out!`);
+			return;
+		}
 
-             if (targetUser.user.bot) {
-                interaction.followUp("I can't timeout a bot.");
-                return;
-             }
-             
-             const targetUserRolePosition = targetUser?.roles.highest.position; //Highest role position of the target
-            const requestUserRolePosition = executorRoles.highest.position; //Highest role position of the user inputting the ban command.
-             
-            if (targetUserRolePosition >= requestUserRolePosition) {
-                await interaction.followUp("❌ You can't ban a user with equal or higher roles!")
-                return; 
-                }   
-            
-                if (!targetUser.bannable) {
-                interaction.followUp('❌ This user cannot be banned!')
-                return;
-                }
-            
-                if (reason.length > 512) {
-                interaction.followUp('❌ The reason cannot be longer than 512 characters.');
-                return;
-                }
+		if (timeoutDuration < 5000 || timeoutDuration > 2.519e9) {
+			await interaction.followUp(
+				`❌ Timeout duration cannot be less than 5 seconds or more than 28 days!`
+			);
+			return;
+		}
 
-                const timeoutLogMessage = new EmbedBuilder()
-                .setColor(0xE9E212)
-                .setAuthor({name: `${interaction.user.username} (ID ${interaction.user.id})`, iconURL: interaction.user.displayAvatarURL()})
-                .setThumbnail(targetUser.user.displayAvatarURL())
-                .addFields(
-                    {name: '\u200b', value: `:mute: **Timed Out** ${targetUser.user.username} (ID ${targetUser.user.id})`},
-                    {name: '\u200b', value: `:page_facing_up: **Reason:** ${reason}`},
-                    {name: '\u200b', value: `:stopwatch: **Duration:** ${prettyMilliseconds(msDuration, {verbose: true})}`}
-                )
-                .setTimestamp()
+		if (!targetMember) {
+			await interaction.followUp(`❌ user is not in this server!`);
+			return;
+		}
+		if (targetMember.user.bot) {
+			await interaction.followUp(`❌ I cannot time out a bot!`);
+			return;
+		}
 
-                const timeoutConfigs = await timeoutLogsChannelSchema.find({
-                    guildId: targetUser.guild.id,
-                });
-                
-                for (const timeoutConfig of timeoutConfigs) {
-                    const timeoutLogChannel = targetUser.guild.channels.cache.get(timeoutConfig.channelId) as BaseGuildTextChannel
-                    ||
-                    (await targetUser.guild.channels.fetch(timeoutConfig.channelId)) as BaseGuildTextChannel;
-                    
-                    if (targetUser.isCommunicationDisabled()) {
-                        await targetUser.send(`**${targetUser.guild.name}:** ${targetUser}, your ⏱️ Timeout duration has been updated to ${prettyMilliseconds(msDuration, {verbose: true})}\n
-                        **Reason:** ${reason}`);
-                        await targetUser.timeout(msDuration, reason);
-                        await interaction.followUp(`${targetUser}'s timeout has been updated to ${prettyMilliseconds(msDuration, {verbose: true})}`);
-                        timeoutLogMessage.setDescription(`🔇**Timeout Updated for** ${targetUser} (ID ${targetUser.user.id})\n
-                           📄 **Reason:** ${reason}\n
-                           ⏱️ **Duration:** ${prettyMilliseconds(msDuration, {verbose: true})}`)
-                        timeoutLogChannel.send({embeds: [timeoutLogMessage]})
-                        return;
-                    }
+		if (targetRoles.highest.position >= executorRoles.highest.position) {
+			await interaction.followUp(
+				`❌ you can't timeout a user with equal or higher roles than you!`
+			);
+			return;
+		}
 
-                    await targetUser.send(`**${targetUser.guild.name}:** ${targetUser}, you have been ⏱️ Timed Out for ${prettyMilliseconds(msDuration, {verbose: true})}\n
-                    **Reason:** ${reason}`);
-                    await targetUser.timeout(msDuration, reason);
-                    await interaction.followUp(`${targetUser} has been timed out for ${prettyMilliseconds(msDuration, {verbose: true})}`);
-                    timeoutLogChannel.send({embeds: [timeoutLogMessage]});
+		const timeoutLogMessage = new EmbedBuilder()
+			.setColor(0xe9e212)
+			.setAuthor({
+				name: `${executor.user.username} (ID ${executor.id})`,
+				iconURL: executor.displayAvatarURL(),
+			})
+			.setThumbnail(targetMember.displayAvatarURL())
+			.setFields(
+				{
+					name: `\u200b`,
+					value: `:mute: **Timed Out:** ${targetMember.user.username} (ID ${targetMember.id})`,
+				},
+				{ name: `\u200b`, value: `:page_facing_up: **Reason:** ${reason}` },
+				{
+					name: `\u200b`,
+					value: `:stopwatch: **Duration:** ${prettyMilliseconds(
+						timeoutDuration,
+						{ verbose: true }
+					)}`,
+				}
+			)
+			.setTimestamp();
 
-                }
-            } catch (error) {
-                console.log(`an error occured in ${__filename}:\n`, error);
-            }
+		const serverConfig = await ServerConfig.findOne({
+			guildId: interaction.guildId,
+		});
 
-         }
-         export const options: CommandOptions = {
-            botPermissions: ["MuteMembers"]
-         }
+		const timeoutLogChannel =
+			(interaction.guild?.channels.cache.get(
+				serverConfig?.timeoutLogsChannelId as string
+			) as BaseGuildTextChannel) ??
+			((await interaction.guild?.channels.fetch(
+				serverConfig?.timeoutLogsChannelId as string
+			)) as BaseGuildTextChannel);
+
+		if (targetMember.isCommunicationDisabled()) {
+			await targetMember.send(
+				`**${
+					interaction.guild.name
+				}:** ${targetMember}, your timeout duration has been updated to ${prettyMilliseconds(
+					timeoutDuration,
+					{ verbose: true }
+				)}\n**Reason:** ${reason}`
+			);
+			await targetMember.timeout(timeoutDuration, reason);
+			await interaction.followUp(
+				`✅ ${targetMember}'s timeout has been updated to ${prettyMilliseconds(
+					timeoutDuration,
+					{ verbose: true }
+				)}`
+			);
+			timeoutLogMessage.setFields(
+				{
+					name: "\u200b",
+					value: `:mute: **Timeout Updated For:** ${targetMember} (ID ${targetMember.id})`,
+				},
+				{
+					name: "\u200b",
+					value: `📄 **Reason:** ${reason}`,
+				},
+				{
+					name: "\u200b",
+					value: `:stopwatch: **Duration:** ${prettyMilliseconds(
+						timeoutDuration,
+						{ verbose: true }
+					)}`,
+				}
+			);
+			timeoutLogChannel.send({ embeds: [timeoutLogMessage] });
+			return;
+		}
+
+		timeoutLogChannel.send({ embeds: [timeoutLogMessage] });
+		await targetMember
+			.send(
+				`**${
+					interaction.guild.name
+				}:** ${targetMember}, you have been timed out for ${prettyMilliseconds(
+					timeoutDuration,
+					{ verbose: true }
+				)}\n**Reason:** ${reason}`
+			)
+			.catch();
+		await targetMember.timeout(timeoutDuration, reason);
+		await interaction.followUp(
+			`✅ ${targetMember} has been timed out for ${prettyMilliseconds(
+				timeoutDuration,
+				{ verbose: true }
+			)}`
+		);
+	} catch (error) {
+		console.log(
+			`an error occured in ${fileURLToPath(import.meta.url)}:\n`,
+			error
+		);
+	}
+}
+
+export const options: CommandOptions = {
+	botPermissions: [`MuteMembers`],
+};

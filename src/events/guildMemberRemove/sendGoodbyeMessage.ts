@@ -1,34 +1,29 @@
-import goodbyeChannelSchema from "../../models/GoodbyeChannel.js";
+import { BaseGuildTextChannel, GuildMember } from "discord.js";
+import ServerConfig from "../../models/ServerConfig.js";
 
-export default async (guildMember: { user: { bot: any; username: string; }; guild: { id: any; channels: { cache: { get: (arg0: string) => any; }; fetch: (arg0: string) => any; }; name: string; }; id: any; }) => {
-    try {
-        const goodbyeConfigs = await goodbyeChannelSchema.find({
-            guildId: guildMember.guild.id,
-        });
+export default async (guildMember: GuildMember) => {
+	try {
+		const serverConfig = await ServerConfig.findOne({
+			guildId: guildMember.guild.id,
+		});
 
-        if (!goodbyeConfigs.length) return;
+		if (!serverConfig?.goodbyeChannelId) return;
 
-        for (const goodbyeConfig of goodbyeConfigs) {
-            const GoodbyeChannel = guildMember.guild.channels.cache.get(goodbyeConfig.channelId)
-            ||
-            (await guildMember.guild.channels.fetch(goodbyeConfig.channelId));
+		const goodbyeChannel =
+			(guildMember.guild.channels.cache.get(
+				serverConfig.goodbyeChannelId
+			) as BaseGuildTextChannel) ??
+			((await guildMember.guild.channels.fetch(
+				serverConfig.goodbyeChannelId
+			)) as BaseGuildTextChannel);
 
-            if (!GoodbyeChannel) {
-                goodbyeChannelSchema.findOneAndDelete({
-                    guildId: guildMember.guild.id,
-                    channelId: goodbyeConfig.channelId,
-                }).catch(()=>{})
-            }
+		const customMessage =
+			serverConfig.customGoodbyeMessage ??
+			`{mention-member} left the server...`;
 
-            const customMessage = goodbyeConfig.customeMessage 
-            ||
-            `{mention-member} left the server...`;
-
-            const goodbyeMessage = customMessage
-            .replace('{mention-member}', `<@${guildMember.id}>`)
-            .replace('{username}', guildMember.user.username)
-        }
-    } catch (error) {
-        
-    }
-}
+		const goodbyeMessage = customMessage
+			.replace("{mention-member}", `<@${guildMember.id}>`)
+			.replace("{username}", guildMember.user.username);
+		goodbyeChannel.send(goodbyeMessage).catch(() => {});
+	} catch (error) {}
+};

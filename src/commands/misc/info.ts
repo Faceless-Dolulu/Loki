@@ -31,7 +31,6 @@ export const data = new SlashCommandBuilder()
 export async function run({ interaction, client, handler }: SlashCommandProps) {
 	try {
 		const subCommand = interaction.options.getSubcommand();
-		const channel = interaction.channel as BaseGuildTextChannel;
 		await interaction.deferReply();
 
 		if (subCommand === "server") {

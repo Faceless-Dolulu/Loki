@@ -1,5 +1,5 @@
-import { ActivityType, PresenceUpdateStatus, type Client } from "discord.js";
-import type { CommandKit } from "commandkit";
+import { ActivityType, PresenceUpdateStatus, Client } from "discord.js";
+import { CommandKit } from "commandkit";
 
 export default function (
 	c: Client<true>,

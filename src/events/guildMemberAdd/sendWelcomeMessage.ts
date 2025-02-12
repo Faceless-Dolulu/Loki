@@ -1,41 +1,35 @@
-import welcomeChannelSchema from '../../models/WelcomeChannel.js'
+import { BaseGuildTextChannel, GuildMember } from "discord.js";
+import ServerConfig from "../../models/ServerConfig.js";
 
-export default async (guildMember: { user: { bot: any; username: string; }; guild: { id: any; channels: { cache: { get: (arg0: string) => any; }; fetch: (arg0: string) => any; }; name: string; }; id: any; }) => {
-    try {
-       
+export default async (guildMember: GuildMember) => {
+	try {
+		const serverConfig = await ServerConfig.findOne({
+			guildId: guildMember.guild.id,
+		});
 
-        const welcomeConfigs = await welcomeChannelSchema.find({
-            guildId: guildMember.guild.id,
-        });
+		if (!serverConfig?.welcomeChannelId) return;
 
-        if (!welcomeConfigs.length) return;
+		const welcomeChannel =
+			(guildMember.guild.channels.cache.get(
+				serverConfig.welcomeChannelId
+			) as BaseGuildTextChannel) ??
+			((await guildMember.guild.channels.fetch(
+				serverConfig.welcomeChannelId
+			)) as BaseGuildTextChannel);
 
-        for (const welcomeConfig of welcomeConfigs) {
-            const welcomeChannel = guildMember.guild.channels.cache.get(welcomeConfig.channelId)
-            ||
-            (await guildMember.guild.channels.fetch(welcomeConfig.channelId));
+		const customMessage =
+			serverConfig.customWelcomeMessage ??
+			`👋 Hey {mention-member}! Welcome to {server-name}!`;
 
-            if (!welcomeChannel) {
-                welcomeChannelSchema.findOneAndDelete({
-                    guildId: guildMember.guild.id,
-                    channelId: welcomeConfig.channelId,
-                }).catch(()=> {})
-            }
+		const welcomeMessage = customMessage
+			.replace("{mention-member}", `<@${guildMember.id}>`)
+			.replace("{username}", guildMember.user.username)
+			.replace("{server-name}", guildMember.guild.name);
 
-            const customMessage = welcomeConfig.customMessage ||
-            `👋 Hey {mention-member}! Welcome to {server-name}`;
-
-            const welcomeMessage = customMessage
-            .replace('{mention-member}', `<@${guildMember.id}>`)
-            .replace('{username}', guildMember.user.username)
-            .replace('{server-name}', guildMember.guild.name);
-
-            welcomeChannel.send(welcomeMessage).catch(() => {});
-        }
-
-
-
-    } catch (error) {
-        
-    }
-}
+		welcomeChannel.send(welcomeMessage).catch((error) => {
+			console.log(error);
+		});
+	} catch (error) {
+		console.log(error);
+	}
+};
