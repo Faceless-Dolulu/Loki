@@ -171,6 +171,7 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 					await interaction.followUp(
 						`:hammer: ${targetUser} has been banned indefinitely`
 					);
+					return;
 				}
 				if (time !== "0") {
 					banLogMessage.addFields({
@@ -207,6 +208,7 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 						{ verbose: true }
 					)}`
 				);
+				return;
 			});
 	} catch (error) {
 		interaction.followUp(
