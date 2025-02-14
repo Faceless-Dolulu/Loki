@@ -1,5 +1,7 @@
 import { SlashCommandProps } from "commandkit";
 import {
+	BaseGuildTextChannel,
+	Message,
 	PermissionFlagsBits,
 	SlashCommandBuilder,
 	TextChannel,
@@ -13,16 +15,31 @@ export const data = new SlashCommandBuilder()
 		option
 			.setName("messages")
 			.setDescription(`The number of messages to delete.`)
-			.setMinValue(2)
+			.setMinValue(1)
 			.setMaxValue(100)
 			.setRequired(true)
 	);
 
 export async function run({ interaction, client, handler }: SlashCommandProps) {
-	const limit = interaction.options.getInteger("messages");
-	const channel = interaction.channel as TextChannel;
+	const limit = interaction.options.getInteger("messages") as number;
+	const channel = interaction.channel as BaseGuildTextChannel;
+	const messagesToDelete = [] as Message[];
+	const messages = (await channel.messages.fetch({ limit: limit })).forEach(
+		(m) => {
+			if (Date.now() - m.createdTimestamp < 1.21e9) {
+				// 14 days old
+				messagesToDelete.push(m);
+			}
+		}
+	);
 
-	await channel.bulkDelete(limit as number);
+	await channel.bulkDelete(messagesToDelete.length);
 
-	interaction.reply(`✅ Cleared ${limit} messages from this channel!`);
+	await interaction.reply(
+		`✅ Cleared ${messagesToDelete.length} messages from this channel!`
+	);
+
+	setTimeout(async () => {
+		await interaction.deleteReply();
+	}, 3000);
 }
