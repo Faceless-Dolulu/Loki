@@ -1,7 +1,7 @@
 ## Licence
 
 This project is licened under a **Proprietary Licence**.
-The code in this repository is not open source, and no rights are granted for any use, modificaiton, or distribution outside of this repository.
+The code in this repository is not open source, and no rights are granted for any use, modification, or distribution outside of this repository.
 Unauthorized use, modifcation, or distributions is strictly prohibited.
 
 For full licence details, please see the [LICENSE](license) file.
