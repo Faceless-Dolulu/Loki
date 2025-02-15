@@ -2,8 +2,10 @@ import { SlashCommandProps } from "commandkit";
 import {
 	ActionRowBuilder,
 	ChannelType,
+	Message,
 	ModalActionRowComponentBuilder,
 	ModalBuilder,
+	PermissionFlagsBits,
 	SlashCommandBuilder,
 	TextInputBuilder,
 	TextInputStyle,
@@ -15,7 +17,13 @@ export const data = new SlashCommandBuilder()
 	.setDescription("null")
 	.addSubcommand((command) =>
 		command.setName("create").setDescription("Create a sticky message")
-	);
+	)
+	.addSubcommand((command) =>
+		command
+			.setName("delete")
+			.setDescription("Deletes the sticky message configured for this channel!")
+	)
+	.setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 export async function run({ interaction, client, handler }: SlashCommandProps) {
 	const command = interaction.options.getSubcommand();
@@ -61,5 +69,39 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 			modal.addComponents(title, description);
 
 			await interaction.showModal(modal);
+
+			return;
+		case "delete":
+			if (!stickies) {
+				return await interaction.reply({
+					content: `❌ A sticky message hasn't been configured in this channel!`,
+				});
+			}
+
+			const sticky =
+				(interaction.channel?.messages.cache.get(
+					stickies.stickyMessageId as string
+				) as Message) ??
+				((await interaction.channel?.messages.fetch(
+					stickies.stickyMessageId as string
+				)) as Message);
+
+			await interaction.reply(`Deleting Sticky Message from Database...`);
+
+			await stickies.deleteOne();
+
+			await interaction.editReply(`Deleting Sticky Message from Channel...`);
+
+			await sticky.delete();
+
+			await interaction.editReply(
+				`✅ Sticky Messages for this channel have been succesfully disabled!`
+			);
+
+			setTimeout(() => {
+				interaction.deleteReply().catch();
+			}, 5000);
+
+			return;
 	}
 }
