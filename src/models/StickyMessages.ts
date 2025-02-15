@@ -5,13 +5,21 @@ const stickyMessages = new Schema({
 		type: String,
 		required: true,
 	},
+	messageTitle: {
+		type: String,
+		required: true,
+	},
 	messageContent: {
 		type: String,
 		required: true,
 	},
-	stickyId: {
+	channelId: {
 		type: String,
 		required: true,
+		unique: true,
+	},
+	stickyMessageId: {
+		type: String,
 	},
 });
 

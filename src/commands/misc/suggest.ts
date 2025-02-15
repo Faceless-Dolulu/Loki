@@ -21,7 +21,7 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 
 	if (!serverConfig?.suggestionChannelId) {
 		interaction.reply({
-			content: `❌ Suggestions haven't been enbaled in this server!`,
+			content: `❌ Suggestions haven't been enabled in this server!`,
 			flags: MessageFlags.Ephemeral,
 		});
 		return;
@@ -29,7 +29,7 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 
 	const modal = new ModalBuilder()
 		.setCustomId("Suggestion")
-		.setTitle("Suggestion");
+		.setTitle("Suggestion Submission");
 
 	const suggestionInput = new TextInputBuilder()
 		.setCustomId(`suggestionInput`)
