@@ -8,6 +8,7 @@ import {
 	PermissionFlagsBits,
 	SlashCommandBuilder,
 	TextInputBuilder,
+	TextInputComponent,
 	TextInputStyle,
 } from "discord.js";
 import StickyMessages from "../../models/StickyMessages.js";
@@ -23,6 +24,11 @@ export const data = new SlashCommandBuilder()
 			.setName("delete")
 			.setDescription("Deletes the sticky message configured for this channel!")
 	)
+	.addSubcommand((command) =>
+		command
+			.setName("edit")
+			.setDescription(`Edit the content of an existing sticky`)
+	)
 	.setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 export async function run({ interaction, client, handler }: SlashCommandProps) {
@@ -30,6 +36,10 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 	const stickies = await StickyMessages.findOne({
 		channelId: interaction.channelId,
 	});
+	let stickyTitle = new TextInputBuilder();
+	let stickyContent = new TextInputBuilder();
+	let title = new ActionRowBuilder<ModalActionRowComponentBuilder>();
+	let description = new ActionRowBuilder<ModalActionRowComponentBuilder>();
 
 	switch (command) {
 		case "create":
@@ -38,34 +48,32 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 					content: `❌ You can't have more than one sticky per channel!`,
 				});
 			}
-
 			const modal = new ModalBuilder()
 				.setCustomId(`Sticky`)
 				.setTitle(`Sticky Message Creation`);
 
-			const stickyTitle = new TextInputBuilder()
+			stickyTitle = new TextInputBuilder()
 				.setCustomId(`stickyTitle`)
 				.setLabel(`Sticky Message Title`)
 				.setStyle(TextInputStyle.Short)
 				.setPlaceholder(`Default title is "Sticky Message"`)
 				.setRequired(false);
 
-			const stickyContent = new TextInputBuilder()
+			stickyContent = new TextInputBuilder()
 				.setCustomId(`stickyContent`)
 				.setLabel(`Message Content`)
 				.setStyle(TextInputStyle.Paragraph)
 				.setPlaceholder(`The message you want stickied`)
 				.setRequired(true);
 
-			const title =
+			title =
 				new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
 					stickyTitle
 				);
-			const description =
+			description =
 				new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
 					stickyContent
 				);
-
 			modal.addComponents(title, description);
 
 			await interaction.showModal(modal);
@@ -103,5 +111,47 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 			}, 5000);
 
 			return;
+		case "edit":
+			try {
+				if (!stickies) {
+					return await interaction.reply({
+						content: `❌ A sticky message hasn't been configured in this channel!`,
+					});
+				}
+				const editModal = new ModalBuilder()
+					.setCustomId(`StickyUpdate`)
+					.setTitle(`Sticky Message Editor`);
+
+				stickyTitle = new TextInputBuilder()
+					.setCustomId(`stickyTitle`)
+					.setLabel(`Sticky Message Title`)
+					.setStyle(TextInputStyle.Short)
+					.setPlaceholder(`Default title is "Sticky Message"`)
+					.setValue(stickies?.messageTitle as string)
+					.setRequired(false);
+
+				stickyContent = new TextInputBuilder()
+					.setCustomId(`stickyContent`)
+					.setLabel(`Message Content`)
+					.setStyle(TextInputStyle.Paragraph)
+					.setPlaceholder(`The message you want stickied`)
+					.setValue(stickies.messageContent as string)
+					.setRequired(true);
+
+				title =
+					new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
+						stickyTitle
+					);
+				description =
+					new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
+						stickyContent
+					);
+
+				editModal.addComponents(title, description);
+
+				await interaction.showModal(editModal);
+			} catch (error) {
+				console.log(error);
+			}
 	}
 }
