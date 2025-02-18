@@ -4,8 +4,10 @@ import {
 	BaseGuildTextChannel,
 	ChannelType,
 	EmbedBuilder,
+	GuildMember,
 	SlashCommandBuilder,
 } from "discord.js";
+import prettyMilliseconds from "pretty-ms";
 import { fileURLToPath } from "url";
 
 export const data = new SlashCommandBuilder()
@@ -105,43 +107,67 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 		}
 
 		if (subCommand === "user") {
-			const targetUser =
-				(await interaction.options.getUser("user")) || interaction.user;
+			const member =
+				(interaction.options.getMember("user") as GuildMember) ??
+				(interaction.member as GuildMember);
 
-			const member = await interaction.guild?.members.cache.get(targetUser.id);
-
-			const memberJoinDate = member?.joinedTimestamp;
-			const memberId = targetUser.id;
-			const memberAvatar = targetUser.displayAvatarURL();
-			const memberAccountCreationDate = member?.user.createdTimestamp;
 			const memberStatus = member?.presence?.activities.find(
 				(a) => a.type === ActivityType.Custom
 			)?.state;
 
-			const colour = member?.displayHexColor || 0x00b8c7;
-
 			const userInfo = new EmbedBuilder()
 				.setTitle(`${member?.user.username}`)
 				.addFields(
-					{ name: "ID", value: memberId, inline: true },
-					{ name: "Avatar", value: `[Link](${memberAvatar})`, inline: true },
+					{ name: "ID", value: member.id as string, inline: true },
+					{
+						name: "Avatar",
+						value: `[Link](${member.displayAvatarURL()})`,
+						inline: true,
+					},
 					{
 						name: "Account Created",
 						//@ts-ignore
-						value: `<t:${parseInt(memberAccountCreationDate / 1000)}:R>`,
-					},
-
-					{
-						name: "Joined Server",
-						//@ts-ignore
-						value: `<t:${parseInt(memberJoinDate / 1000)}:R>`,
+						value: member.user.createdAt.toUTCString(),
 						inline: true,
 					},
-					{ name: "Status", value: `Custom Status: ${memberStatus}` }
+					{
+						name: `Account Age`,
+						value: prettyMilliseconds(
+							(Date.now() - member?.user.createdAt.valueOf()) as number,
+							{ formatSubMilliseconds: false, unitCount: 3, verbose: true }
+						),
+						inline: true,
+					},
+					{
+						name: "Joined Server At",
+						value: member.joinedAt?.toUTCString() as string,
+						inline: true,
+					},
+					{
+						name: "Join Server Age",
+
+						value: prettyMilliseconds(
+							//@ts-ignore
+							(Date.now() - member.joinedTimestamp?.valueOf()) as number,
+							{
+								unitCount: 3,
+								verbose: true,
+								formatSubMilliseconds: false,
+								hideSeconds: true,
+							}
+						),
+						inline: true,
+					},
+					{
+						name: "Status",
+						value:
+							memberStatus ??
+							`Has no active status, is invisible/offline or is not in the bot's cache.`,
+						inline: false,
+					}
 				)
-				.setThumbnail(memberAvatar)
-				.setTimestamp()
-				.setColor(colour);
+				.setThumbnail(member.displayAvatarURL())
+				.setTimestamp();
 
 			interaction.followUp({ embeds: [userInfo] });
 		}

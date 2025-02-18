@@ -30,7 +30,7 @@ new CommandKit({
 	validationsPath: path.join(__dirname, "validations"),
 	skipBuiltInValidations: false,
 	devUserIds: ["306958469439684608"],
-	devGuildIds: ["1306696123766931486"],
+	devGuildIds: ["1306696123766931486", "1322655860228493312"],
 	bulkRegister: true,
 });
 
