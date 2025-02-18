@@ -15,8 +15,7 @@ export const data = new SlashCommandBuilder()
 export async function run({ interaction, client, handler }: SlashCommandProps) {
 	try {
 		const target =
-			interaction.options.getUser("target")?.displayName ||
-			`a random person nearby`;
+			interaction.options.getUser("target") ?? `a random person nearby`;
 
 		const rng = Math.floor(Math.random() * 100);
 
