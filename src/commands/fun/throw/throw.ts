@@ -20,16 +20,19 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 		const rng = Math.floor(Math.random() * 100);
 
 		if (rng < 5) {
-			interaction.reply(
+			await interaction.reply(
 				`TRIPLE THROW!! Threw **${randomObject()}**, **${randomObject()}**, and **${randomObject()}** at **${target}**`
 			);
+			return;
 		}
 		if (rng < 15) {
-			interaction.reply(
+			await interaction.reply(
 				`DOUBLE THROW! Threw **${randomObject()}**, and **${randomObject()}** at **${target}**`
 			);
+			return;
 		} else {
-			interaction.reply(`Threw **${randomObject()}** at **${target}**`);
+			await interaction.reply(`Threw **${randomObject()}** at **${target}**`);
+			return;
 		}
 	} catch (error) {}
 }
