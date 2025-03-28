@@ -22,7 +22,7 @@ export default async (guild: Guild, client: Client) => {
 				},
 				{
 					name: `Date left`,
-					value: Date.now().toString(),
+					value: `<t:${Date.now()}:D>`,
 					inline: true,
 				}
 			);

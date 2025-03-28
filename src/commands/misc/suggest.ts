@@ -1,49 +1,49 @@
-import { SlashCommandProps } from "commandkit";
-import {
-	ActionRowBuilder,
-	MessageFlags,
-	ModalActionRowComponentBuilder,
-	ModalBuilder,
-	SlashCommandBuilder,
-	TextInputBuilder,
-	TextInputStyle,
-} from "discord.js";
-import ServerConfig from "../../models/ServerConfig.js";
+// import { SlashCommandProps } from "commandkit";
+// import {
+// 	ActionRowBuilder,
+// 	MessageFlags,
+// 	ModalActionRowComponentBuilder,
+// 	ModalBuilder,
+// 	SlashCommandBuilder,
+// 	TextInputBuilder,
+// 	TextInputStyle,
+// } from "discord.js";
+// import ServerConfig from "../../models/ServerConfigs_new.js";
 
-export const data = new SlashCommandBuilder()
-	.setName("suggest")
-	.setDescription("Make a suggestion");
+// export const data = new SlashCommandBuilder()
+// 	.setName("suggest")
+// 	.setDescription("Make a suggestion");
 
-export async function run({ interaction, client, handler }: SlashCommandProps) {
-	const serverConfig = await ServerConfig.findOne({
-		guildId: interaction.guildId,
-	});
+// export async function run({ interaction, client, handler }: SlashCommandProps) {
+// 	const serverConfig = await ServerConfig.findOne({
+// 		guildId: interaction.guildId,
+// 	});
 
-	if (!serverConfig?.suggestionChannelId) {
-		interaction.reply({
-			content: `❌ Suggestions haven't been enabled in this server!`,
-			flags: MessageFlags.Ephemeral,
-		});
-		return;
-	}
+// 	if (!serverConfig?.suggestionChannelId) {
+// 		interaction.reply({
+// 			content: `❌ Suggestions haven't been enabled in this server!`,
+// 			flags: MessageFlags.Ephemeral,
+// 		});
+// 		return;
+// 	}
 
-	const modal = new ModalBuilder()
-		.setCustomId("Suggestion")
-		.setTitle("Suggestion Submission");
+// 	const modal = new ModalBuilder()
+// 		.setCustomId("Suggestion")
+// 		.setTitle("Suggestion Submission");
 
-	const suggestionInput = new TextInputBuilder()
-		.setCustomId(`suggestionInput`)
-		.setLabel("Your Suggestion:")
-		.setStyle(TextInputStyle.Paragraph)
-		.setRequired(true)
-		.setPlaceholder(`We should add...`);
+// 	const suggestionInput = new TextInputBuilder()
+// 		.setCustomId(`suggestionInput`)
+// 		.setLabel("Your Suggestion:")
+// 		.setStyle(TextInputStyle.Paragraph)
+// 		.setRequired(true)
+// 		.setPlaceholder(`We should add...`);
 
-	const suggestion =
-		new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
-			suggestionInput
-		);
+// 	const suggestion =
+// 		new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(
+// 			suggestionInput
+// 		);
 
-	modal.addComponents(suggestion);
+// 	modal.addComponents(suggestion);
 
-	await interaction.showModal(modal);
-}
+// 	await interaction.showModal(modal);
+// }
