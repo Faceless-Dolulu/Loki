@@ -1,40 +1,56 @@
-// import { CommandKit } from "commandkit";
-// import { Client, EmbedBuilder, Message, TextChannel } from "discord.js";
-// import StickyMessages from "../../models/StickyMessages.js";
+import { CommandKit } from "commandkit";
+import {
+	Client,
+	ColorResolvable,
+	EmbedBuilder,
+	Message,
+	TextChannel,
+} from "discord.js";
+import ServerConfigs from "../../models/ServerConfigs.js";
 
-// export default async function (
-// 	message: Message,
-// 	client: Client,
-// 	handler: CommandKit
-// ) {
-// 	try {
-// 		const sticky = await StickyMessages.findOne({
-// 			guildId: message.guildId,
-// 			channelId: message.channelId,
-// 		});
-// 		if (message.author.bot) return;
-// 		if (!sticky) return;
-// 		const channel = message.channel as TextChannel;
+export default async function (
+	message: Message,
+	client: Client,
+	handler: CommandKit
+) {
+	try {
+		const serverConfig = await ServerConfigs.findOne({
+			guildId: message.guildId,
+		});
+		const stickyMessages = serverConfig?.stickyMessages.filter(
+			(entry) => entry.channelId === message.channelId
+		);
+		if (message.author.bot || stickyMessages?.length == 0 || !stickyMessages)
+			return;
 
-// 		const prevSticky =
-// 			(message.channel.messages.cache.get(
-// 				sticky.stickyMessageId as string
-// 			) as Message) ??
-// 			((await message.channel.messages.fetch(
-// 				sticky.stickyMessageId as string
-// 			)) as Message);
+		const embeds = [] as EmbedBuilder[];
+		stickyMessages.forEach((entry) => {
+			const embed = new EmbedBuilder()
+				.setTitle(entry.messageTitle ?? null)
+				.setDescription(entry.messageContent as string)
+				.setColor((entry.stickyColour as ColorResolvable) ?? null)
+				.setImage((entry.stickyAttachment as string) ?? null);
+			embeds.push(embed);
+		});
+		const channel = message.channel as TextChannel;
+		if (stickyMessages[0].stickyMessageId) {
+			const prevStickyMessage =
+				message.channel.messages.cache.get(
+					stickyMessages[0].stickyMessageId as string
+				) ??
+				(await message.channel.messages.fetch(
+					stickyMessages[0].stickyMessageId as string
+				));
+			prevStickyMessage.delete();
+		}
 
-// 		const embed = new EmbedBuilder()
-// 			.setTitle(sticky.messageTitle)
-// 			.setDescription(sticky.messageContent)
-// 			.setColor(0xb45d00);
+		const newMessage = await channel.send({ embeds: embeds });
 
-// 		await prevSticky.delete();
-
-// 		const newMessage = await channel.send({ embeds: [embed] });
-
-// 		await sticky.updateOne({ stickyMessageId: newMessage.id });
-// 		await sticky.save();
-// 		return true;
-// 	} catch {}
-// }
+		stickyMessages.forEach((entry) => {
+			entry.set({ stickyMessageId: newMessage.id });
+		});
+		await serverConfig?.save();
+	} catch (error) {
+		console.log(error);
+	}
+}

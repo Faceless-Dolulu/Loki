@@ -1,17 +1,14 @@
 export const objects = [
 	"anime girls",
-	"b1nzy",
 	"bad jokes",
 	"a boom box",
-	"garliko~ (from GBDS)",
 	"old cheese",
 	"heroin",
 	"sadness",
 	"depression",
 	"an evil villain with a plan to destroy earth",
 	"a superhero on his way to stop an evil villain",
-	"Dolus#4638",
-	"hot firemen",
+	"Dolus",
 	"fat idiots",
 	"a hairy potter",
 	"hentai",
@@ -40,11 +37,8 @@ export const objects = [
 	"the biggest fattest vape",
 	"donald trump's wall",
 	"smash mouth - all star",
-	"H4sIABaqgVoA/1WPvW7FIAyFd57ibHmOTlWWrlVHenFIGrCvwCTi7a9Dq0rZ0Pn5OP6kqRBYULV4jlQqVJDkIPclDTvLCV0JpSWq8BxQBUEwuzcsLSU8JOdNM7FOFefqFfOUrbLxvnGELINzSkuBJ0UkvcyKpUg2XocYviC27tyMn1YVp2f2UDJ6t+5qEy7mQpQM6d5F1SP7nYbdONhqtWnOfdBxseTqx+34CzxverIFlxzk5JtRGsMXMd64M1ClMqK31P+/j9JvRvXdXhK+O930cYd9u9HAru0X+gIEKbNKeQEAAA==",
 	"death",
 	"tide pods",
-	"a happy life with a good career and a nice family",
-	"a sad life with a dead-end career and a horrible family",
 	"divorce papers",
 	"an engagement ring",
 	"yourself",
@@ -110,7 +104,3 @@ export const objects = [
 	"beans",
 	"a discord channel",
 ];
-
-export function randomObject() {
-	return objects[Math.floor(Math.random() * objects.length)];
-}

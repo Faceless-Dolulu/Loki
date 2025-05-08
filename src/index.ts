@@ -1,8 +1,9 @@
 import "dotenv/config";
-import { Client, IntentsBitField, Partials } from "discord.js";
+import { Client, Collection, IntentsBitField, Partials } from "discord.js";
 import path from "path";
 import { CommandKit } from "commandkit";
 import mongoose from "mongoose";
+import { S3Client } from "@aws-sdk/client-s3";
 
 const client = new Client({
 	intents: [
@@ -21,8 +22,8 @@ const client = new Client({
 		Partials.Reaction,
 	],
 });
-const __dirname = import.meta.dirname;
 
+const __dirname = import.meta.dirname;
 new CommandKit({
 	client,
 	commandsPath: path.join(__dirname, "commands"),
@@ -33,7 +34,14 @@ new CommandKit({
 	devGuildIds: ["1306696123766931486", "1322655860228493312"],
 	bulkRegister: true,
 });
-
+export const r2 = new S3Client({
+	region: "auto",
+	endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+	credentials: {
+		accessKeyId: process.env.CLOUDFLARE_ACCESS_KEY_ID as string,
+		secretAccessKey: process.env.CLOUDFLARE_SECRET_ACCESS_KEY as string,
+	},
+});
 mongoose.connect(String(process.env.DB_URL)).then(() => {
 	console.log(`Connected to database.`);
 	client.login(process.env.BOT_TOKEN);

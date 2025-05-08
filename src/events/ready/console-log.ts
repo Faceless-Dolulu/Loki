@@ -6,5 +6,5 @@ export default function (
 	client: Client<true>,
 	handler: CommandKit
 ) {
-	console.log(`${c.user.username} is ready!`);
+	console.log(`${c.user.username} is online!`);
 }

@@ -6,48 +6,49 @@ import {
 	GuildMember,
 	InteractionContextType,
 	MessageFlags,
+	Role,
 	SlashCommandBuilder,
 	TextChannel,
 	userMention,
 } from "discord.js";
-import ModerationConfig from "../../models/ModerationConfig.js";
-import { TimeoutSettings } from "../../Util/ServerConfigClasses.js";
-import { TimeoutCase } from "../../Util/ModerationCaseClasses.js";
-import { normalizeTimeUnit } from "../../Util/NormalizeTimeUnits.js";
 import { getNextCaseId } from "../../Util/ModerationCaseCounter.js";
+import ModerationConfig from "../../models/ModerationConfig.js";
+import { MuteSettings } from "../../Util/ServerConfigClasses.js";
+import { normalizeTimeUnit } from "../../Util/NormalizeTimeUnits.js";
 import ms from "ms";
-import sharp from "sharp";
+import { MuteCase } from "../../Util/ModerationCaseClasses.js";
 import { r2 } from "../../index.js";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
+import sharp from "sharp";
 import prettyMilliseconds from "pretty-ms";
 
 export const data = new SlashCommandBuilder()
 	.setContexts(InteractionContextType.Guild)
-	.setName(`timeout`)
-	.setDescription(`Timeout a user in this server`)
+	.setName(`mute`)
+	.setDescription(`Mute a user in this server`)
 	.addUserOption((option) =>
 		option
 			.setName(`target`)
-			.setDescription(`The user you want to timeout`)
+			.setDescription(`The user you want to mute`)
 			.setRequired(true)
 	)
 	.addStringOption((option) =>
 		option
 			.setName(`duration`)
-			.setDescription(`The duration of the timeout (30m, 1h, etc.)`)
+			.setDescription(`The duration of the mute (30m, 1h, etc.)`)
 			.setRequired(true)
 	)
 	.addStringOption((option) =>
 		option
 			.setName(`reason`)
-			.setDescription(`The reason for timing out this user`)
+			.setDescription(`The reason for muting this user`)
 			.setMaxLength(128)
 	)
 	.addAttachmentOption((option) =>
 		option
 			.setName(`evidence`)
 			.setDescription(
-				`Upload images supporting your timeout reason. More can be uploaded through \`/cases edit\``
+				`Upload images support your mute reason. More can be uploaded through \`/cases edit\``
 			)
 	);
 
@@ -55,23 +56,23 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 	const targetUser = interaction.options.getMember(`target`) as GuildMember;
 	const reason =
-		interaction.options.getString(`reason`) ?? "No reason was provided";
+		interaction.options.getString(`reason`) ?? `No reason was provided`;
 	const guildId = interaction.guildId as string;
 	let evidence = interaction.options.getAttachment(`evidence`) ?? null;
 	const caseId = await getNextCaseId(guildId);
 	const config = await ModerationConfig.findOne({ guildId });
-	const settings = new TimeoutSettings(
-		config?.timeout.enabled as boolean,
-		config?.timeout.reasonRequired as boolean,
-		config?.timeout.evidenceRequired as boolean,
-		config?.timeout.whitelistedRoles as string[],
-		config?.timeout.defaultDuration as number,
-		config?.timeout.logChannel as string
+	const settings = new MuteSettings(
+		config?.mute.enabled as boolean,
+		config?.mute.reasonRequired as boolean,
+		config?.mute.evidenceRequired as boolean,
+		config?.warn.whitelistedRoles as string[],
+		config?.warn.defaultDuration as number,
+		config?.warn.logChannel as string,
+		config?.warn.muteRoleId as string
 	);
 
-	if ((await settings.checkRequirements(interaction, evidence)) === false) {
+	if ((await settings.checkRequirements(interaction, evidence)) === false)
 		return;
-	}
 
 	const durationInput = interaction.options.getString(`duration`);
 	const matches = durationInput?.matchAll(
@@ -80,18 +81,13 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 
 	const seenUnits = new Set<string>();
 	let totalDuration: number = 0;
+
 	for (const match of matches as RegExpStringIterator<RegExpExecArray>) {
-		if (totalDuration > 2_419_200_000) {
-			return await interaction.followUp({
-				content: `❌ Timeout duration cannot exceed 28 days!`,
-				flags: MessageFlags.Ephemeral,
-			});
-		}
 		const rawUnit = match[3].toLowerCase();
 		const normalizedUnit = normalizeTimeUnit(rawUnit);
 		if (!normalizedUnit) {
 			return await interaction.followUp({
-				content: `⚠️ Invalid time unit detected.\nValid units: \`s\`, \`m\`, \`h\``,
+				content: `⚠️ Invalid time unit detected.\nValid units: \`m\`, \`h\`, \`d\``,
 			});
 		}
 		if (seenUnits.has(normalizedUnit as string)) {
@@ -107,22 +103,67 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 		const duration = ms(match[2] + normalizedUnit);
 		totalDuration += duration;
 	}
-	const timeoutCase = new TimeoutCase(
-		caseId,
-		guildId,
-		targetUser.id,
-		interaction.user.id,
-		reason!,
-		totalDuration
-	);
 
 	const confirmationEmbed = new EmbedBuilder()
 		.setTitle(`Case Created => ID: ${caseId}`)
 		.setFooter({ text: `You can upload more evidence through \`/cases edit\`` })
 		.setColor(0x00ff00);
-
 	const fileName = `${Date.now()}-${crypto.randomUUID()}`;
 	const supportedImageTypes = ["image/jpeg", "image/png", "image/webp"];
+	let muted!: string | Role;
+	if (config?.mute.muteRoleId) {
+		muted = config.mute.muteRoleId as string;
+	}
+	if (!config?.mute.muteRoleId) {
+		muted = (await interaction.guild?.roles.create({
+			name: `Muted`,
+			color: 0x6e6e6e,
+			reason: `Auto-created muted role for mute command`,
+		})) as Role;
+
+		const deniedPermissions = {
+			ViewChannel: false,
+			ReadMessageHistory: false,
+			SendMessages: false,
+			AddReactions: false,
+			AttachFiles: false,
+			EmbedLinks: false,
+			Connect: false,
+			Speak: false,
+		};
+
+		interaction.guild?.channels.cache
+			.filter((c) => c.type === ChannelType.GuildCategory)
+			.forEach((category) =>
+				category.permissionOverwrites.edit(muted as Role, deniedPermissions)
+			);
+
+		(await interaction.guild?.channels.fetch(undefined, { cache: true }))
+			?.filter((c) => c?.parent === null)
+			.forEach((channel) =>
+				channel?.permissionOverwrites.edit(muted as Role, deniedPermissions)
+			);
+		confirmationEmbed.addFields({
+			name: `⚠️ Mute Role Auto-Generated`,
+			value: `⚠️ Mute Role was not configured, a mute role was auto-generated. Please configure role permissions in each channel`,
+		});
+	}
+	let muteRole!: string;
+	if (typeof muted === "string") {
+		muteRole = muted;
+	} else if (muted instanceof Role) {
+		muteRole = muted.id;
+	}
+	const muteCase = new MuteCase(
+		caseId,
+		guildId,
+		targetUser.id,
+		interaction.user.id,
+		reason!,
+		totalDuration,
+		true,
+		muteRole as string
+	);
 	if (evidence) {
 		if (
 			evidence.contentType &&
@@ -159,7 +200,7 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 
 				const evidenceUrl = `https://loki-moderation-evidence-proxy.andrei-anastasiu.workers.dev/cases/${guildId}/${caseId}/${fileName}.webp`;
 
-				timeoutCase.addEvidenceUrls(evidenceUrl);
+				muteCase.addEvidenceUrls(evidenceUrl);
 			} catch (error) {
 				evidence = null;
 				console.error(`Evidence upload failed:`, error);
@@ -177,8 +218,11 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 		}
 	}
 	try {
-		await timeoutCase.createCase();
-		await targetUser.timeout(totalDuration, reason);
+		await targetUser.roles.add(
+			muted,
+			`User was muted by ${interaction.user.globalName} (ID ${interaction.user.id})`
+		);
+		await muteCase.createCase();
 		confirmationEmbed.addFields({
 			name: `Duration`,
 			value: `${prettyMilliseconds(totalDuration, { verbose: true })}`,
@@ -192,9 +236,10 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 			flags: MessageFlags.Ephemeral,
 		});
 	}
+
 	try {
 		await targetUser.send({
-			content: `You have been timed out in **${
+			content: `You have been muted in **${
 				interaction.guild?.name
 			}**\nDuration: ${prettyMilliseconds(totalDuration, {
 				verbose: true,
@@ -211,10 +256,8 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 			value: `❌ Could not send DM to user`,
 		});
 	}
-
-	const container = timeoutCase.createViewCaseContainer();
-	const channelId =
-		config?.timeout.logChannel ?? config?.fallbackActionLogChannel;
+	const container = muteCase.createViewCaseContainer();
+	const channelId = config?.mute.logChannel ?? config?.fallbackActionLogChannel;
 	if (channelId) {
 		const channel = interaction.guild?.channels.cache.get(
 			channelId as string
@@ -222,10 +265,10 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 
 		if (!channel || channel.type !== ChannelType.GuildText) {
 			// Log channel not found or is not a text channel
-			console.warn(`Timeout log channel not found or is not a text channel`);
+			console.warn(`Mute log channel not found or is not a text channel`);
 			confirmationEmbed.addFields({
 				name: `⚠️ NO LOG CHANNEL`,
-				value: `⚠️ **YOU HAVE NO LOG CHANNELS CONFIGURED IN THIS SERVER! CASES WILL NOT BE AUTOMATICALLY DISPLAYED FOR VIEW IN THIS SERVER!**\n**THIS CAN BE FIXED BY RUNNING \`/settings moderation\` AND CONFIGURING THE TIMEOUT COMMAND!**`,
+				value: `⚠️ **YOU HAVE NO LOG CHANNELS CONFIGURED IN THIS SERVER! CASES WILL NOT BE AUTOMATICALLY DISPLAYED FOR VIEW IN THIS SERVER!**\n**THIS CAN BE FIXED BY RUNNING \`/settings moderation\` AND CONFIGURING THE MUTE COMMAND!**`,
 			});
 			// Potentially notify server admins that their logging config needs updating
 		} else {

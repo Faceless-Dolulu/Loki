@@ -1,6 +1,8 @@
 import { SlashCommandProps } from "commandkit";
-import { SlashCommandBuilder } from "discord.js";
-import { objects, randomObject } from "./throwable-objects.js";
+import { MessageFlags, SlashCommandBuilder, userMention } from "discord.js";
+import { objects } from "./throwable-objects.js";
+import ThrowItemList from "../../../models/ThrowItemList.js";
+import { throwResponses } from "./throwResponses.js";
 
 export const data = new SlashCommandBuilder()
 	.setName("throw")
@@ -13,26 +15,73 @@ export const data = new SlashCommandBuilder()
 	);
 
 export async function run({ interaction, client, handler }: SlashCommandProps) {
-	try {
-		const target =
-			interaction.options.getUser("target") ?? `a random person nearby`;
+	const targetUser = interaction.options.getUser("target");
 
-		const rng = Math.floor(Math.random() * 100);
+	const target = targetUser
+		? userMention(targetUser.id)
+		: "a random person nearby";
 
-		if (rng < 5) {
-			await interaction.reply(
-				`TRIPLE THROW!! Threw **${randomObject()}**, **${randomObject()}**, and **${randomObject()}** at **${target}**`
-			);
-			return;
-		}
-		if (rng < 15) {
-			await interaction.reply(
-				`DOUBLE THROW! Threw **${randomObject()}**, and **${randomObject()}** at **${target}**`
-			);
-			return;
-		} else {
-			await interaction.reply(`Threw **${randomObject()}** at **${target}**`);
-			return;
-		}
-	} catch (error) {}
+	const config = await ThrowItemList.findOne({
+		guildId: interaction.guildId,
+	});
+	if (config?.blacklistedChannels.includes(interaction.channelId)) {
+		return interaction.reply({
+			content: `❌ This command is disabled in this channel`,
+			flags: MessageFlags.Ephemeral,
+		});
+	}
+	let pool: string[] = [];
+	if (!config) {
+		pool = [...objects];
+	} else if (config.customItemsOnly === false) {
+		pool = [...objects, ...config.customItems];
+	} else if (config.customItemsOnly === true) {
+		pool = [...config.customItems];
+	}
+
+	if (pool.length === 0) {
+		return interaction.reply({
+			content:
+				"⚠️ No throwable items are configured. If you are seeing this, make a bug report",
+			flags: MessageFlags.Ephemeral,
+		});
+	}
+
+	function randomItem() {
+		return pool[Math.floor(Math.random() * pool.length)];
+	}
+
+	const rng = Math.floor(Math.random() * 100);
+	let responsePool: string[] = [];
+	let response: string;
+	if (rng <= 5) {
+		responsePool = throwResponses.miss;
+		response = responsePool[Math.floor(Math.random() * responsePool.length)]
+			.replace(`{user}`, userMention(interaction.user.id))
+			.replace(`{item}`, randomItem())
+			.replace(`{target}`, target as string);
+	} else if (rng <= 15) {
+		responsePool = throwResponses.threeItem;
+		response = responsePool[Math.floor(Math.random() * responsePool.length)]
+			.replace(`{user}`, userMention(interaction.user.id))
+			.replace(`{item1}`, randomItem())
+			.replace(`{item2}`, randomItem())
+			.replace(`{item3}`, randomItem())
+			.replace(`{target}`, target as string);
+	} else if (rng <= 50) {
+		responsePool = throwResponses.twoItem;
+		response = responsePool[Math.floor(Math.random() * responsePool.length)]
+			.replace(`{user}`, userMention(interaction.user.id))
+			.replace(`{item1}`, randomItem())
+			.replace(`{item2}`, randomItem())
+			.replace(`{target}`, target as string);
+	} else {
+		responsePool = throwResponses.oneItem;
+		response = responsePool[Math.floor(Math.random() * responsePool.length)]
+			.replace(`{user}`, userMention(interaction.user.id))
+			.replace(`{item}`, randomItem())
+			.replace(`{target}`, target as string);
+	}
+
+	return await interaction.reply(response);
 }

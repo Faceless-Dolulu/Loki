@@ -1,131 +1,196 @@
-// import { CommandOptions, SlashCommandProps } from "commandkit";
-// import {
-// 	BaseGuildTextChannel,
-// 	EmbedBuilder,
-// 	GuildMember,
-// 	GuildMemberRoleManager,
-// 	InteractionContextType,
-// 	PermissionFlagsBits,
-// 	SlashCommandBuilder,
-// } from "discord.js";
-// import serverConfigSchema from "../../models/ServerConfigs_new.js";
-// import { fileURLToPath } from "url";
+import { CommandOptions, SlashCommandProps } from "commandkit";
+import {
+	channelMention,
+	ChannelType,
+	EmbedBuilder,
+	GuildMember,
+	InteractionContextType,
+	MessageFlags,
+	SlashCommandBuilder,
+	TextChannel,
+	User,
+	userMention,
+} from "discord.js";
+import { getNextCaseId } from "../../Util/ModerationCaseCounter.js";
+import ModerationConfig from "../../models/ModerationConfig.js";
+import { KickSettings } from "../../Util/ServerConfigClasses.js";
+import { KickCase } from "../../Util/ModerationCaseClasses.js";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { r2 } from "../../index.js";
+import * as crypto from "crypto";
+import sharp from "sharp";
 
-// export const data = new SlashCommandBuilder()
-// 	.setName("kick")
-// 	.setDescription("Kicks a user from this server")
-// 	.setDefaultMemberPermissions(PermissionFlagsBits.KickMembers)
-// 	.addUserOption((option) =>
-// 		option
-// 			.setName("user")
-// 			.setDescription("The user you want to kick")
-// 			.setRequired(true)
-// 	)
-// 	.addStringOption((option) =>
-// 		option
-// 			.setName("reason")
-// 			.setDescription("The reason for kicking this user from the server")
-// 			.setMaxLength(512)
-// 	)
-// 	.setContexts(InteractionContextType.Guild);
+export const data = new SlashCommandBuilder()
+	.setContexts(InteractionContextType.Guild)
+	.setName(`kick`)
+	.setDescription(`Kick a user from this server`)
+	.addUserOption((option) =>
+		option
+			.setName(`target`)
+			.setDescription(`The user you want to kick`)
+			.setRequired(true)
+	)
+	.addStringOption((option) =>
+		option
+			.setName(`reason`)
+			.setDescription(`The reason for kicking this user`)
+			.setMaxLength(128)
+	)
+	.addAttachmentOption((option) =>
+		option
+			.setName(`evidence`)
+			.setDescription(
+				`Upload images supporting your kick reason. More can be uploaded through\`/cases edit\``
+			)
+	);
 
-// export async function run({ interaction, client, handler }: SlashCommandProps) {
-// 	try {
-// 		const targetMember = interaction.options.getMember("user") as GuildMember;
-// 		const reason =
-// 			interaction.options.getString("reason") ?? "No reason was provided";
+export async function run({ interaction, client, handler }: SlashCommandProps) {
+	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+	const targetUser = interaction.options.getMember(`target`) as GuildMember;
+	const reason =
+		interaction.options.getString(`reason`) ?? "No reason was provided";
+	const guildId = interaction.guildId as string;
+	let evidence = interaction.options.getAttachment(`evidence`) ?? null;
+	const caseId = await getNextCaseId(guildId);
+	const config = await ModerationConfig.findOne({ guildId });
 
-// 		await interaction.deferReply();
+	const settings = new KickSettings(
+		config?.kick.enabled as boolean,
+		config?.kick.reasonRequired as boolean,
+		config?.kick.evidenceRequired as boolean,
+		config?.kick.whitelistedRoles as string[],
+		config?.kick.logChannel as string
+	);
 
-// 		const executor = interaction.member as GuildMember;
-// 		const executorRoles = executor?.roles as GuildMemberRoleManager;
-// 		const targetRoles = targetMember?.roles as GuildMemberRoleManager;
+	if ((await settings.checkRequirements(interaction, evidence)) === false) {
+		return;
+	}
 
-// 		if (!targetMember) {
-// 			await interaction.followUp(`❌ User is not in this server!`);
-// 		}
+	const kickCase = new KickCase(
+		caseId,
+		guildId,
+		targetUser.id,
+		interaction.user.id,
+		reason!
+	);
+	const confirmationEmbed = new EmbedBuilder()
+		.setTitle(`Case Created => ID: ${caseId}`)
+		.setFooter({ text: `You can upload more evidence through \`/cases edit\`` })
+		.setColor(0x00ff00);
+	const fileName = `${Date.now()}-${crypto.randomUUID()}`;
+	const supportedImageTypes = ["image/jpeg", "image/png", "image/webp"];
+	if (evidence) {
+		if (
+			evidence.contentType &&
+			supportedImageTypes.includes(evidence.contentType as string)
+		) {
+			try {
+				const res = await fetch(evidence.url);
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+				const buffer = await res.arrayBuffer();
+				const processedImage = await sharp(buffer)
+					.resize(1024, null, { fit: "inside", withoutEnlargement: true })
+					.toFormat(`webp`, { quality: 85 })
+					.toBuffer();
 
-// 		if (targetMember.id === executor.id) {
-// 			await interaction.followUp(`❌ you cannot kick yourself!`);
-// 			return;
-// 		}
+				const key = `cases/${guildId}/${caseId}/${fileName}.webp`;
 
-// 		if (targetRoles.highest.position >= executorRoles.highest.position) {
-// 			await interaction.followUp(
-// 				`❌ You can't kick a user with equal or higher roles!`
-// 			);
-// 			return;
-// 		}
+				await r2.send(
+					new PutObjectCommand({
+						Bucket: process.env.CLOUDFLARE_IMAGE_BUCKET,
+						Key: key,
+						Body: processedImage,
+						ContentType: "image/webp",
+						Metadata: {
+							caseId: caseId.toString(),
+							uploaderId: interaction.user.id,
+							uploadedAt: new Date().toISOString(),
+							imageHash: crypto
+								.createHash("MD5")
+								.update(processedImage)
+								.digest("hex"),
+						},
+					})
+				);
 
-// 		if (!targetMember.kickable) {
-// 			interaction.followUp(`❌ This user cannot be kicked!`);
-// 			return;
-// 		}
+				const evidenceUrl = `https://loki-moderation-evidence-proxy.andrei-anastasiu.workers.dev/cases/${guildId}/${caseId}/${fileName}.webp`;
 
-// 		const serverConfig = await serverConfigSchema.findOne({
-// 			guildId: interaction.guildId,
-// 		});
+				kickCase.addEvidenceUrls(evidenceUrl);
+			} catch (error) {
+				evidence = null;
+				console.error(`Evidence upload failed:`, error);
+				confirmationEmbed.addFields({
+					name: `\u200b`,
+					value: `⚠️ Failed to process uploaded file, skipping it. You can try again later through \`/cases edit\``,
+				});
+			}
+		} else {
+			evidence = null;
+			confirmationEmbed.addFields({
+				name: `\u200b`,
+				value: `⚠️ Uploaded file format not supported. Please use JPEG, PNG, or WebP. You can try again later through \`/cases edit\``,
+			});
+		}
+	}
+	try {
+		await kickCase.createCase();
+		await targetUser.kick(reason);
+	} catch (error) {
+		console.error(`Failed to create kick case:`, error);
+		return interaction.followUp({
+			content: `❌ Failed to kick ${userMention(
+				targetUser.id
+			)}. Process aborted. Pease try again later.\nIf the issue persists, please make a bug report in the support server.`,
+			flags: MessageFlags.Ephemeral,
+		});
+	}
+	try {
+		await targetUser.send({
+			content: `You have been kicked from **${interaction.guild?.name}**\n**Reason:** ${reason}`,
+		});
 
-// 		const kickLogChannel =
-// 			(interaction.guild?.channels.cache.get(
-// 				serverConfig?.kickLogsChannelId as string
-// 			) as BaseGuildTextChannel) ??
-// 			((await interaction.guild?.channels.fetch(
-// 				serverConfig?.kickLogsChannelId as string
-// 			)) as BaseGuildTextChannel);
+		confirmationEmbed.addFields({
+			name: `User Notification`,
+			value: `✅ User was notified via DM`,
+		});
+	} catch (error) {
+		confirmationEmbed.addFields({
+			name: `User Notification`,
+			value: `❌ Could not send DM to user`,
+		});
+	}
 
-// 		const kickLogMessage = new EmbedBuilder()
-// 			.setColor(0xffff00)
-// 			.setAuthor({
-// 				name: `${executor.user.username} (ID ${executor.id})`,
-// 				iconURL: executor.displayAvatarURL(),
-// 			})
-// 			.setThumbnail(targetMember.displayAvatarURL())
-// 			.addFields(
-// 				{
-// 					name: "\u200b",
-// 					value: `👢 **Kicked:**${targetMember} (ID ${targetMember.id})`,
-// 				},
-// 				{
-// 					name: "\u200b",
-// 					value: `:page_facing_up: **Reason:** ${reason}`,
-// 				}
-// 			)
-// 			.setTimestamp();
-// 		targetMember
-// 			.send({
-// 				embeds: [
-// 					new EmbedBuilder()
-// 						.setColor(0xffff00)
-// 						.setDescription(
-// 							`⚠ You were **Kicked** from ${interaction.guild?.name}\n📄 **Reason:** ${reason} `
-// 						)
-// 						.setTimestamp()
-// 						.setThumbnail(interaction.guild?.iconURL() as string),
-// 				],
-// 			})
-// 			.catch();
+	const container = kickCase.createViewCaseContainer();
 
-// 		await targetMember.kick(reason).then(async () => {
-// 			if (kickLogChannel !== null) {
-// 				kickLogChannel.send({ embeds: [kickLogMessage] });
-// 			}
+	const channelId = config?.kick.logChannel ?? config?.fallbackActionLogChannel;
+	if (channelId) {
+		const channel = interaction.guild?.channels.cache.get(
+			channelId as string
+		) as TextChannel;
 
-// 			await interaction.followUp(
-// 				`👢 ${targetMember} has been kicked from the server!`
-// 			);
-// 		});
-// 	} catch (error) {
-// 		interaction.followUp(
-// 			`An error occured running this command. Please try again in a moment.`
-// 		);
-// 		console.log(
-// 			`An error occured in ${fileURLToPath(import.meta.url)}:\n`,
-// 			error
-// 		);
-// 	}
-// }
-
-// export const options: CommandOptions = {
-// 	botPermissions: [`KickMembers`],
-// };
+		if (!channel || channel.type !== ChannelType.GuildText) {
+			// Log channel not found or is not a text channel
+			console.warn(`Kick log channel not found or is not a text channel`);
+			confirmationEmbed.addFields({
+				name: `⚠️ NO LOG CHANNEL`,
+				value: `⚠️ **YOU HAVE NO LOG CHANNELS CONFIGURED IN THIS SERVER! CASES WILL NOT BE AUTOMATICALLY DISPLAYED FOR VIEW IN THIS SERVER!**\n**THIS CAN BE FIXED BY RUNNING \`/settings moderation\` AND CONFIGURING THE KICK COMMAND!**`,
+			});
+			// Potentially notify server admins that their logging config needs updating
+		} else {
+			await channel.send({
+				components: [container],
+				flags: MessageFlags.IsComponentsV2,
+			});
+		}
+	}
+	await interaction.followUp({
+		embeds: [confirmationEmbed],
+		flags: MessageFlags.Ephemeral,
+	});
+	return;
+}
+export const options: CommandOptions = {
+	cooldown: 3000, // 3 seconds
+	cooldownScope: `guild`,
+	botPermissions: [`KickMembers`],
+};
