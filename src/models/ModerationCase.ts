@@ -46,6 +46,7 @@ const CaseSchema = new Schema<ModerationCase>({
 		type: Boolean,
 		default: null,
 	},
+
 	mutedRoleId: {
 		type: String,
 		default: null,
@@ -54,7 +55,11 @@ const CaseSchema = new Schema<ModerationCase>({
 		type: Boolean,
 		default: false,
 	},
-	editedReason: {
+	closingStaffId: {
+		type: String,
+		default: null,
+	},
+	closeReason: {
 		type: String,
 		default: null,
 	},

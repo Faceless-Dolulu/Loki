@@ -35,7 +35,8 @@ export interface ModerationCase {
 	active: boolean;
 	mutedRoleId: string;
 	edited: boolean;
-	editedReason: string;
+	closingStaffId: string;
+	closeReason: string;
 	evidenceUrls: string[];
 	automodMetadata: string;
 }

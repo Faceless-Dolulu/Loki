@@ -1,7 +1,7 @@
 import { CommandKit } from "commandkit";
 import { Client } from "discord.js";
 import { ModerationCase as Case } from "../../Util/Interfaces.js";
-import ModerationCase from "../../models/ModerationCase";
+import ModerationCase from "../../models/ModerationCase.js";
 import { ChangeStreamDocument } from "mongodb";
 const activeTempBans = new Map<string, NodeJS.Timeout>();
 export default async function (
