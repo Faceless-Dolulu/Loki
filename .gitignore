@@ -3,3 +3,9 @@ node_modules/
 .vscode
 .wrangler
 dist/
+Cloudflare_Workers/Evidence_Proxy/loki-moderation-evidence-proxy/.vscode
+Cloudflare_Workers/Evidence_Proxy/loki-moderation-evidence-proxy/.wrangler
+Cloudflare_Workers/Evidence_Proxy/loki-moderation-evidence-proxy/node_modules
+Cloudflare_Workers/Evidence_Proxy/loki-moderation-evidence-proxy/.editorconfig
+Cloudflare_Workers/Evidence_Proxy/loki-moderation-evidence-proxy/.gitignore
+
