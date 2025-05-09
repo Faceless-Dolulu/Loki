@@ -24,6 +24,7 @@ export default async function (
 			});
 			if (config) {
 				config.set(`active`, false);
+				config.set(`closeReason`, `🤖 Ban Expired`);
 				await config.save();
 			}
 		} catch (error) {
@@ -64,7 +65,10 @@ export default async function (
 				change.fullDocument.active === true
 			) {
 				const newUnban = change.fullDocument as Case;
-				unban(newUnban);
+				if (newUnban.duration === null) {
+					return;
+				}
+				return unban(newUnban);
 			} else if (
 				change.operationType === "update" &&
 				change.fullDocument?.action === "ban" &&
@@ -78,7 +82,7 @@ export default async function (
 				if (timeout) {
 					clearTimeout(timeout);
 					activeTempBans.delete(key);
-				}
+				} else return;
 			}
 		}
 	);

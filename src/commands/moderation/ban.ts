@@ -77,8 +77,9 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 	if ((await settings.checkRequirements(interaction, evidence)) === false)
 		return;
 
-	const durationInput = interaction.options.getString(`duration`);
-	const messagePurgeInput = interaction.options.getString(`message-age-pruge`);
+	const durationInput = interaction.options.getString(`duration`) ?? null;
+	const messagePurgeInput =
+		interaction.options.getString(`message-age-pruge`) ?? null;
 	const matchKey =
 		/^((\d+)\s*(years|year|yr|y|months|month|mo|weeks|week|w|days|day|d|hours|hour|h|minutes|minute|min|m|seconds|second|sec|s)\s*)+$/g;
 	const durationMatches = durationInput?.matchAll(matchKey);
@@ -88,58 +89,62 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 	const seenMessagePurgeUnits = new Set<string>();
 	let totalBanDuration: number = 0;
 	let maxMessagePurgeAge: number = 0;
+	if (durationInput !== null) {
+		for (const match of durationMatches as RegExpStringIterator<RegExpExecArray>) {
+			const rawUnit = match[3].toLowerCase();
+			const normalizedUnit = normalizeTimeUnit(rawUnit);
+			if (!normalizedUnit) {
+				return await interaction.followUp({
+					content: `⚠️ Invalid time unit detected in the ban duration argument.\nValid units: \`d\`, \`w\`, \`mo\`, \`y\``,
+				});
+			}
+			if (seenDurationUnits.has(normalizedUnit as string)) {
+				return await interaction.followUp({
+					content: `⚠️ You've specified the \`${normalizedUnit}\` unit multiple times in the ban duration argument. Please use each time unit only once.`,
+					flags: MessageFlags.Ephemeral,
+				});
+			}
 
-	for (const match of durationMatches as RegExpStringIterator<RegExpExecArray>) {
-		const rawUnit = match[3].toLowerCase();
-		const normalizedUnit = normalizeTimeUnit(rawUnit);
-		if (!normalizedUnit) {
-			return await interaction.followUp({
-				content: `⚠️ Invalid time unit detected in the ban duration argument.\nValid units: \`d\`, \`w\`, \`mo\`, \`y\``,
-			});
+			seenDurationUnits.add(normalizedUnit as string);
+			const duration = ms(match[2] + normalizedUnit);
+			totalBanDuration += duration;
 		}
-		if (seenDurationUnits.has(normalizedUnit as string)) {
-			return await interaction.followUp({
-				content: `⚠️ You've specified the \`${normalizedUnit}\` unit multiple times in the ban duration argument. Please use each time unit only once.`,
-				flags: MessageFlags.Ephemeral,
-			});
-		}
-
-		seenDurationUnits.add(normalizedUnit as string);
-		const duration = ms(match[2] + normalizedUnit);
-		totalBanDuration += duration;
+	} else {
+		totalBanDuration = 0;
 	}
 
-	for (const match of messagePurgeMatches as RegExpStringIterator<RegExpExecArray>) {
-		const rawUnit = match[3].toLowerCase();
-		const normalizedUnit = normalizeTimeUnit(rawUnit);
-		if (!normalizedUnit) {
-			return await interaction.followUp({
-				content: `⚠️ Invalid time unit detected in the message purge age argument.\nValid units: \`m\`, \`h\`, \`d\``,
-				flags: MessageFlags.Ephemeral,
-			});
-		}
-		if (seenMessagePurgeUnits.has(normalizedUnit as string)) {
-			return await interaction.followUp({
-				content: `⚠️ You've specified the \`${normalizedUnit}\` unit multiple times in the message purge age argument. Please use each time unit only once.`,
-				flags: MessageFlags.Ephemeral,
-			});
-		}
-		seenMessagePurgeUnits.add(normalizedUnit as string);
-		const age = ms(match[2] + normalizedUnit);
-		maxMessagePurgeAge += age;
+	if (messagePurgeInput !== null) {
+		for (const match of messagePurgeMatches as RegExpStringIterator<RegExpExecArray>) {
+			const rawUnit = match[3].toLowerCase();
+			const normalizedUnit = normalizeTimeUnit(rawUnit);
+			if (!normalizedUnit) {
+				return await interaction.followUp({
+					content: `⚠️ Invalid time unit detected in the message purge age argument.\nValid units: \`m\`, \`h\`, \`d\``,
+					flags: MessageFlags.Ephemeral,
+				});
+			}
+			if (seenMessagePurgeUnits.has(normalizedUnit as string)) {
+				return await interaction.followUp({
+					content: `⚠️ You've specified the \`${normalizedUnit}\` unit multiple times in the message purge age argument. Please use each time unit only once.`,
+					flags: MessageFlags.Ephemeral,
+				});
+			}
+			seenMessagePurgeUnits.add(normalizedUnit as string);
+			const age = ms(match[2] + normalizedUnit);
+			maxMessagePurgeAge += age;
 
-		if (maxMessagePurgeAge > 604_800_000) {
-			// Check if input message purge age exceeds the 7 day limit imposed by Discord API
-			return await interaction.followUp({
-				content: `⚠️ Message purge age cannot exceed 7 days.`,
-				flags: MessageFlags.Ephemeral,
-			});
+			if (maxMessagePurgeAge > 604_800_000) {
+				// Check if input message purge age exceeds the 7 day limit imposed by Discord API
+				return await interaction.followUp({
+					content: `⚠️ Message purge age cannot exceed 7 days.`,
+					flags: MessageFlags.Ephemeral,
+				});
+			}
 		}
+	} else {
+		maxMessagePurgeAge = 0;
 	}
-	let active: boolean = false;
-	if (totalBanDuration > 0) {
-		active = true;
-	}
+
 	const confirmationEmbed = new EmbedBuilder()
 		.setTitle(`Case Created => ID: ${caseId}`)
 		.setFooter({ text: `You can upload more evidence through \`/cases edit\`` })
@@ -154,7 +159,7 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 		interaction.user.id,
 		reason!,
 		totalBanDuration,
-		active
+		true
 	);
 
 	if (evidence) {
@@ -261,7 +266,7 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 		});
 	}
 
-	const container = banCase.createViewCaseContainer();
+	const container = banCase.createViewCaseContainer(false);
 	const channelId = config?.ban.logChannel ?? config?.fallbackActionLogChannel;
 	if (channelId) {
 		const channel = interaction.guild?.channels.cache.get(

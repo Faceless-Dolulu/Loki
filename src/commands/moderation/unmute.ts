@@ -1,4 +1,4 @@
-import { SlashCommandProps } from "commandkit";
+import { CommandOptions, SlashCommandProps } from "commandkit";
 import {
 	EmbedBuilder,
 	GuildMember,
@@ -118,3 +118,8 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 		flags: MessageFlags.Ephemeral,
 	});
 }
+export const options: CommandOptions = {
+	botPermissions: [`ManageRoles`],
+	cooldown: 3000, // 3 seconds
+	cooldownScope: "guild",
+};

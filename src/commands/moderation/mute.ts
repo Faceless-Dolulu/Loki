@@ -256,7 +256,7 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 			value: `❌ Could not send DM to user`,
 		});
 	}
-	const container = muteCase.createViewCaseContainer();
+	const container = muteCase.createViewCaseContainer(false);
 	const channelId = config?.mute.logChannel ?? config?.fallbackActionLogChannel;
 	if (channelId) {
 		const channel = interaction.guild?.channels.cache.get(
@@ -287,5 +287,5 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 export const options: CommandOptions = {
 	cooldown: 3000, // 3 seconds
 	cooldownScope: "guild",
-	botPermissions: [`ModerateMembers`],
+	botPermissions: [`ManageRoles`],
 };

@@ -35,7 +35,7 @@ const CaseSchema = new Schema<ModerationCase>({
 	},
 	createdAt: {
 		type: Date,
-		default: Date.now,
+		default: Date.now(),
 		index: true,
 	},
 	expiresAt: {

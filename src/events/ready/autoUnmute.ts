@@ -29,6 +29,7 @@ export default async function (
 			});
 			if (config) {
 				config?.set(`active`, false);
+				config.set(`closeReason`, `🤖 Mute Expired`);
 				await config?.save();
 			}
 		} catch (error) {

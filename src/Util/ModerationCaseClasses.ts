@@ -24,6 +24,9 @@ abstract class BaseModerationCase {
 	duration?: number; // Milliseconds
 	muteRoleId?: string;
 	active?: boolean; // Useful for temporary punishments
+	closeReason?: string;
+	closingStaffId?: string;
+	edited?: boolean;
 
 	constructor(
 		caseId: number,
@@ -84,6 +87,16 @@ abstract class BaseModerationCase {
 	}
 
 	toObject(): Record<string, unknown> {
+		let duration: number | null;
+		if (this.duration) {
+			if (this.duration > 0) {
+				duration = this.duration;
+			} else {
+				duration = null;
+			}
+		} else {
+			duration = null;
+		}
 		return {
 			guildId: this.guildId,
 			caseId: this.caseId,
@@ -93,10 +106,13 @@ abstract class BaseModerationCase {
 			reason: this.reason,
 			createdAt: this.timeStamp,
 			evidenceUrls: this.evidenceUrls ?? [],
-			duration: this.duration ?? null,
+			duration: duration,
 			active: this.active ?? null,
 			autoModMetadata: this.automodMetadata ?? null,
 			mutedRoleId: this.muteRoleId,
+			edited: this.edited ?? null,
+			closingStaffId: this.closingStaffId ?? null,
+			closeReason: this.closeReason ?? null,
 			expiresAt:
 				new Date(this.timeStamp.getTime() + (this.duration ?? 0)) ?? null,
 		};
@@ -105,7 +121,7 @@ abstract class BaseModerationCase {
 		await ModerationCase.create(this.toObject());
 	}
 
-	createViewCaseContainer(): ContainerBuilder {
+	createViewCaseContainer(updated: boolean): ContainerBuilder {
 		const container = new ContainerBuilder();
 
 		const CASE_COLOURS: Record<string, number> = {
@@ -118,14 +134,22 @@ abstract class BaseModerationCase {
 		};
 
 		container.setAccentColor(CASE_COLOURS[this.getActionKey()] ?? 0x999999);
-
-		const titleSection = new TextDisplayBuilder().setContent(
-			`# Case ID: ${this.caseId}\n${time(
-				this.timeStamp,
-				TimestampStyles.ShortDateTime
-			)}`
-		);
-
+		let titleSection = new TextDisplayBuilder();
+		if (updated) {
+			titleSection.setContent(
+				`# Updated Case ID: ${this.caseId}\n${time(
+					this.timeStamp,
+					TimestampStyles.ShortDateTime
+				)}`
+			);
+		} else {
+			titleSection.setContent(
+				`# Case ID: ${this.caseId}\n${time(
+					this.timeStamp,
+					TimestampStyles.ShortDateTime
+				)}`
+			);
+		}
 		container.addTextDisplayComponents(titleSection);
 
 		const divider = new SeparatorBuilder()
@@ -159,14 +183,21 @@ abstract class BaseModerationCase {
 				`**Expires:** ${time(expiryDate, TimestampStyles.RelativeTime)}`
 			);
 		}
+		actionDetails.push(`**Reason:** ${this.reason}`);
 
 		if (this.active === true) {
 			actionDetails.push(`**Status:** 🔴 Active`);
 		} else if (this.active === false) {
-			actionDetails.push(`**Status: ✅ Completed`);
+			actionDetails.push(`**Status: ✅ Closed`);
+			if (this.closingStaffId) {
+				actionDetails.push(
+					`**Closing Moderator:** ${userMention(this.closingStaffId as string)}`
+				);
+				actionDetails.push(`**Closing Reason:** ${this.closeReason}`);
+			} else {
+				actionDetails.push(`**Closing Reason:** ${this.closeReason}`);
+			}
 		}
-
-		actionDetails.push(`**Reason:** ${this.reason}`);
 
 		const modDetails: string[] = [];
 		modDetails.push(`### Moderator Information`);
@@ -296,12 +327,17 @@ export class BanCase extends BaseModerationCase {
 		reason: string,
 		duration?: number,
 		active?: boolean,
+		closingStaffId?: string,
+		closeReason?: string,
+
 		automodMetaData?: string
 	) {
 		super(caseId, guildId, targetId, staffId, reason);
 		this.duration = duration;
 		this.active = active;
 		this.automodMetadata = automodMetaData;
+		this.closeReason = closeReason;
+		this.closingStaffId = closingStaffId;
 	}
 
 	getActionKey(): string {

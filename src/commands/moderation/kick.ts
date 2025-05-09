@@ -160,7 +160,7 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 		});
 	}
 
-	const container = kickCase.createViewCaseContainer();
+	const container = kickCase.createViewCaseContainer(false);
 
 	const channelId = config?.kick.logChannel ?? config?.fallbackActionLogChannel;
 	if (channelId) {

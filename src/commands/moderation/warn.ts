@@ -156,7 +156,7 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 			value: `❌ Could not send DM to user`,
 		});
 	}
-	const container = warnCase.createViewCaseContainer();
+	const container = warnCase.createViewCaseContainer(false);
 
 	const channelId = config?.warn.logChannel ?? config?.fallbackActionLogChannel;
 	if (channelId) {

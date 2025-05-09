@@ -212,7 +212,7 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 		});
 	}
 
-	const container = timeoutCase.createViewCaseContainer();
+	const container = timeoutCase.createViewCaseContainer(false);
 	const channelId =
 		config?.timeout.logChannel ?? config?.fallbackActionLogChannel;
 	if (channelId) {
