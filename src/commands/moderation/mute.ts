@@ -36,7 +36,7 @@ export const data = new SlashCommandBuilder()
 		option
 			.setName(`duration`)
 			.setDescription(`The duration of the mute (30m, 1h, etc.)`)
-			.setRequired(true)
+			.setRequired(false)
 	)
 	.addStringOption((option) =>
 		option
@@ -65,10 +65,10 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 		config?.mute.enabled as boolean,
 		config?.mute.reasonRequired as boolean,
 		config?.mute.evidenceRequired as boolean,
-		config?.warn.whitelistedRoles as string[],
-		config?.warn.defaultDuration as number,
-		config?.warn.logChannel as string,
-		config?.warn.muteRoleId as string
+		config?.mute.whitelistedRoles as string[],
+		config?.mute.defaultDuration as number,
+		config?.mute.logChannel as string,
+		config?.mute.muteRoleId as string
 	);
 
 	if ((await settings.checkRequirements(interaction, evidence)) === false)
@@ -82,26 +82,30 @@ export async function run({ interaction, client, handler }: SlashCommandProps) {
 	const seenUnits = new Set<string>();
 	let totalDuration: number = 0;
 
-	for (const match of matches as RegExpStringIterator<RegExpExecArray>) {
-		const rawUnit = match[3].toLowerCase();
-		const normalizedUnit = normalizeTimeUnit(rawUnit);
-		if (!normalizedUnit) {
-			return await interaction.followUp({
-				content: `⚠️ Invalid time unit detected.\nValid units: \`m\`, \`h\`, \`d\``,
-			});
-		}
-		if (seenUnits.has(normalizedUnit as string)) {
-			return await interaction.followUp({
-				content: `⚠️ You've specified the ${
-					"`" + normalizedUnit + "`"
-				} unit multiple times. Please use each time unit only once.`,
-				flags: MessageFlags.Ephemeral,
-			});
-		}
+	if (durationInput) {
+		for (const match of matches as RegExpStringIterator<RegExpExecArray>) {
+			const rawUnit = match[3].toLowerCase();
+			const normalizedUnit = normalizeTimeUnit(rawUnit);
+			if (!normalizedUnit) {
+				return await interaction.followUp({
+					content: `⚠️ Invalid time unit detected.\nValid units: \`m\`, \`h\`, \`d\``,
+				});
+			}
+			if (seenUnits.has(normalizedUnit as string)) {
+				return await interaction.followUp({
+					content: `⚠️ You've specified the ${
+						"`" + normalizedUnit + "`"
+					} unit multiple times. Please use each time unit only once.`,
+					flags: MessageFlags.Ephemeral,
+				});
+			}
 
-		seenUnits.add(normalizedUnit as string);
-		const duration = ms(match[2] + normalizedUnit);
-		totalDuration += duration;
+			seenUnits.add(normalizedUnit as string);
+			const duration = ms(match[2] + normalizedUnit);
+			totalDuration += duration;
+		}
+	} else {
+		totalDuration = config?.mute.defaultDuration as number;
 	}
 
 	const confirmationEmbed = new EmbedBuilder()
